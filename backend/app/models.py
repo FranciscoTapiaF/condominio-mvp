@@ -150,7 +150,7 @@ class AuditEvent(Base):
     action = Column(String(255), nullable=False)
     resource_type = Column(String(100), nullable=True)
     resource_id = Column(String(255), nullable=True)
-    metadata = Column(Text, nullable=True)
+    audit_metadata = Column(Text, nullable=True)
     ip_address = Column(String(100), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
