@@ -1,70 +1,66 @@
+import hashlib
+import uuid
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr
+from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
+
+from app.models import AccessEvent, Visit, VisitToken
 
 
-class UserCreate(BaseModel):
-    name: str
-    email: EmailStr
-    password: str
-    phone: Optional[str] = None
+def normalize_plate(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    cleaned = "".join(ch for ch in value.upper() if ch.isalnum())
+    return cleaned[:20] if cleaned else None
 
 
-class UserOut(BaseModel):
-    id: str
-    name: str
-    email: EmailStr
-    phone: Optional[str] = None
+def create_visit_token_hash(raw_token: str) -> str:
+    return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
 
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
+def validate_visit_token(db: Session, raw_token: str) -> Visit:
+    token_hash = create_visit_token_hash(raw_token)
+    visit_token = db.query(VisitToken).filter(VisitToken.token_hash == token_hash).first()
+    if not visit_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido")
+
+    if visit_token.revoked_at:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token revocado")
+
+    visit = db.query(Visit).filter(Visit.id == visit_token.visit_id).first()
+    if not visit:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Visita no encontrada")
+
+    now = datetime.utcnow()
+    if visit.status != "active":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Visita no activa")
+    if now < visit.valid_from or now > visit.valid_until:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Visita fuera de vigencia")
+    if visit.uses_count >= visit.max_uses:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Visita agotada")
+
+    return visit
 
 
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
+def register_access(db: Session, visit: Visit, event_type: str, license_plate: Optional[str] = None):
+    event = AccessEvent(
+        id=uuid.uuid4(),
+        condominium_id=visit.condominium_id,
+        visit_id=visit.id,
+        unit_id=visit.unit_id,
+        event_type=event_type,
+        license_plate_detected=normalize_plate(license_plate),
+        source="qr",
+        occurred_at=datetime.utcnow(),
+    )
+    db.add(event)
+    db.flush()
 
+    if event_type == "entry":
+        visit.uses_count += 1
 
-class CondominiumCreate(BaseModel):
-    name: str
-    address: str
-    timezone: str = "America/Santiago"
-
-
-class UnitCreate(BaseModel):
-    code: str
-    block: Optional[str] = None
-
-
-class VisitCreate(BaseModel):
-    condominium_id: str
-    unit_id: str
-    visitor_alias: Optional[str] = None
-    license_plate: Optional[str] = None
-    valid_from: datetime
-    valid_until: datetime
-    max_uses: int = 1
-    notes: Optional[str] = None
-
-
-class AccessValidationRequest(BaseModel):
-    token: str
-
-
-class AccessValidationResponse(BaseModel):
-    valid: bool
-    visit_id: Optional[str] = None
-    message: Optional[str] = None
-
-
-class AccessEventCreate(BaseModel):
-    condominium_id: str
-    visit_id: Optional[str] = None
-    event_type: str
-    license_plate_detected: Optional[str] = None
-    license_plate_confidence: Optional[float] = None
-    source: str = "qr"
-    occurred_at: Optional[datetime] = None
+    db.commit()
+    db.refresh(event)
+    return event

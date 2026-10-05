@@ -22,7 +22,6 @@ from app.schemas import (
 )
 from app.services import create_visit_token_hash, validate_visit_token
 
-# Crear tablas
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Condominio MVP")
