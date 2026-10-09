@@ -44,12 +44,20 @@ def validate_visit_token(db: Session, raw_token: str) -> Visit:
     return visit
 
 
-def register_access(db: Session, visit: Visit, event_type: str, license_plate: Optional[str] = None):
+def register_access(
+    db: Session,
+    visit: Optional[Visit],
+    event_type: str,
+    license_plate: Optional[str] = None,
+    guard_user_id: Optional[uuid.UUID] = None,
+    condominium_id: Optional[uuid.UUID] = None,
+):
     event = AccessEvent(
         id=uuid.uuid4(),
-        condominium_id=visit.condominium_id,
-        visit_id=visit.id,
-        unit_id=visit.unit_id,
+        condominium_id=condominium_id,
+        visit_id=visit.id if visit else None,
+        unit_id=visit.unit_id if visit else None,
+        guard_user_id=guard_user_id,
         event_type=event_type,
         license_plate_detected=normalize_plate(license_plate),
         source="qr",
@@ -58,7 +66,7 @@ def register_access(db: Session, visit: Visit, event_type: str, license_plate: O
     db.add(event)
     db.flush()
 
-    if event_type == "entry":
+    if event_type == "entry" and visit:
         visit.uses_count += 1
 
     db.commit()

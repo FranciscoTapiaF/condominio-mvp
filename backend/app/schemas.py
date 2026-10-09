@@ -68,3 +68,9 @@ class AccessEventCreate(BaseModel):
     license_plate_confidence: Optional[float] = None
     source: str = "qr"
     occurred_at: Optional[datetime] = None
+    token: Optional[str] = None
+
+
+class AssignRoleRequest(BaseModel):
+    user_email: EmailStr
+    role: str
