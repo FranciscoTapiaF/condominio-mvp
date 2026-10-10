@@ -195,7 +195,7 @@ def assign_role(
     # Solo administrador puede asignar roles
     admin_membership = db.query(Membership).filter(
         Membership.user_id == current_user.id,
-        Membership.condominium_id == uuid.UUID(condominio_id),
+        Membership.condominium_id == uuid.UUID(condominium_id),
         Membership.status == "active",
         Membership.role == "administrador",
     ).first()
