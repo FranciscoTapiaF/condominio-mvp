@@ -2,6 +2,7 @@ from datetime import datetime
 import uuid
 
 from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
 from sqlalchemy.orm import Session
@@ -26,6 +27,17 @@ from app.services import create_visit_token_hash, validate_visit_token, register
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Condominio MVP")
+
+# CORS: permite que el frontend (otro origen/puerto) llame a la API.
+# En desarrollo se permite cualquier origen; restringir en producción.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
