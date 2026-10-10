@@ -1,6 +1,9 @@
 import axios from 'axios'
 
-const API_BASE_URL = 'http://localhost:8000'
+// Usa el mismo host desde el que se abrió el frontend (IP del servidor),
+// en lugar de "localhost", que desde tu PC apuntaría a tu propio equipo.
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000`
 
 const api = axios.create({
   baseURL: API_BASE_URL,
