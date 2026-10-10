@@ -8,7 +8,7 @@ from jose import JWTError
 from sqlalchemy.orm import Session
 
 from app.auth import create_access_token, decode_access_token, hash_password, verify_password
-from app.db import Base, engine, get_db
+from app.db import Base, engine, get_db, SessionLocal
 from app.models import AccessEvent, Condominium, Membership, Unit, User, Visit, VisitToken
 from app.schemas import (
     AccessEventCreate,
@@ -23,8 +23,16 @@ from app.schemas import (
     VisitCreate,
 )
 from app.services import create_visit_token_hash, validate_visit_token, register_access
+from app.seed import init_demo_data
 
 Base.metadata.create_all(bind=engine)
+
+# Inicializar datos demo al arrancar la app
+db = SessionLocal()
+try:
+    init_demo_data(db)
+finally:
+    db.close()
 
 app = FastAPI(title="Condominio MVP")
 
@@ -187,7 +195,7 @@ def assign_role(
     # Solo administrador puede asignar roles
     admin_membership = db.query(Membership).filter(
         Membership.user_id == current_user.id,
-        Membership.condominium_id == uuid.UUID(condominium_id),
+        Membership.condominium_id == uuid.UUID(condominio_id),
         Membership.status == "active",
         Membership.role == "administrador",
     ).first()
