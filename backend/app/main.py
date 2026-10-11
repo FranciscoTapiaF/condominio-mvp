@@ -127,8 +127,74 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
 
 @app.get("/me")
-def me(current_user: User = Depends(get_current_user)):
-    return {"id": str(current_user.id), "name": current_user.name, "email": current_user.email}
+def me(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    memberships = (
+        db.query(Membership)
+        .filter(Membership.user_id == current_user.id, Membership.status == "active")
+        .all()
+    )
+    roles = sorted({m.role for m in memberships})
+    condominiums = [
+        {
+            "id": str(m.condominium_id),
+            "role": m.role,
+            "name": m.condominium.name,
+        }
+        for m in memberships
+        if m.condominium is not None
+    ]
+
+    return {
+        "id": str(current_user.id),
+        "name": current_user.name,
+        "email": current_user.email,
+        "roles": roles,
+        "condominiums": condominiums,
+    }
+
+
+@app.get("/condominiums")
+def list_user_condominiums(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    memberships = (
+        db.query(Membership)
+        .filter(Membership.user_id == current_user.id, Membership.status == "active")
+        .all()
+    )
+    return [
+        {
+            "id": str(m.condominium_id),
+            "name": m.condominium.name,
+            "role": m.role,
+        }
+        for m in memberships
+        if m.condominium is not None
+    ]
+
+
+@app.get("/condominiums/{condominium_id}/units")
+def list_units(
+    condominium_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    membership = db.query(Membership).filter(
+        Membership.user_id == current_user.id,
+        Membership.condominium_id == uuid.UUID(condominium_id),
+        Membership.status == "active",
+    ).first()
+
+    if not membership:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permiso denegado")
+
+    units = db.query(Unit).filter(Unit.condominium_id == uuid.UUID(condominium_id)).all()
+    return [
+        {
+            "id": str(u.id),
+            "code": u.code,
+            "block": u.block,
+        }
+        for u in units
+    ]
 
 
 @app.post("/condominiums")
@@ -234,6 +300,15 @@ def assign_role(
 
 @app.post("/condominiums/{condominium_id}/visits")
 def create_visit(condominium_id: str, payload: VisitCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    membership = db.query(Membership).filter(
+        Membership.user_id == user.id,
+        Membership.condominium_id == uuid.UUID(condominium_id),
+        Membership.status == "active",
+    ).first()
+
+    if not membership or membership.role not in ["administrador", "guardia", "propietario"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permiso denegado")
+
     visit = Visit(
         id=uuid.uuid4(),
         condominium_id=uuid.UUID(condominium_id),
@@ -387,6 +462,9 @@ def list_visits(
             "uses_count": v.uses_count,
             "max_uses": v.max_uses,
             "visitor_alias": v.visitor_alias,
+            "license_plate": v.license_plate,
+            "notes": v.notes,
+            "created_by_user_id": str(v.created_by_user_id),
         }
         for v in visits
     ]
