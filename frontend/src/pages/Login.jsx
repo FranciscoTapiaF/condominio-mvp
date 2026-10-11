@@ -18,7 +18,23 @@ export default function Login() {
       const response = await authAPI.login(email, password)
       localStorage.setItem('token', response.data.access_token)
       localStorage.setItem('userEmail', email)
-      navigate('/dashboard')
+
+      const me = await authAPI.getMe()
+      const roles = me.data.roles || []
+      localStorage.setItem('userRoles', JSON.stringify(roles))
+      localStorage.setItem('userProfile', JSON.stringify(me.data))
+
+      const rolePriority = ['guardia', 'administrador', 'propietario']
+      const selectedRole =
+        rolePriority.find((role) => roles.includes(role)) || roles[0] || 'propietario'
+
+      if (roles.length > 1) {
+        navigate('/role-selector')
+      } else if (selectedRole === 'propietario') {
+        navigate('/owner-dashboard')
+      } else {
+        navigate('/dashboard')
+      }
     } catch (err) {
       setError(err.response?.data?.detail || 'Error al iniciar sesión')
     } finally {
@@ -77,9 +93,11 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="text-center text-gray-600 text-sm mt-4">
-          Demo: guardia@test.com / 123456
-        </p>
+        <div className="mt-6 space-y-2 text-sm text-gray-600">
+          <p><strong>Guardia:</strong> guardia@test.com / 123456</p>
+          <p><strong>Admin:</strong> admin@test.com / 123456</p>
+          <p><strong>Propietario:</strong> propietario@test.com / 123456</p>
+        </div>
       </div>
     </div>
   )
