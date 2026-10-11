@@ -2,6 +2,8 @@ import React from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import RoleSelector from './pages/RoleSelector'
+import OwnerDashboard from './pages/OwnerDashboard'
 import './index.css'
 
 function ProtectedRoute({ children }) {
@@ -15,6 +17,14 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route
+          path="/role-selector"
+          element={
+            <ProtectedRoute>
+              <RoleSelector />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/dashboard"
           element={
             <ProtectedRoute>
@@ -22,7 +32,15 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-        <Route path="/" element={<Navigate to="/dashboard" />} />
+        <Route
+          path="/owner-dashboard"
+          element={
+            <ProtectedRoute>
+              <OwnerDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/" element={<Navigate to="/login" />} />
       </Routes>
     </Router>
   )
