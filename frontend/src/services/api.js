@@ -29,12 +29,16 @@ export const authAPI = {
 }
 
 export const condominiumAPI = {
+  getCondominiums: () => api.get('/condominiums'),
+  getUnits: (condominiumId) => api.get(`/condominiums/${condominiumId}/units`),
   getVisits: (condominiumId) =>
     api.get(`/condominiums/${condominiumId}/visits`),
   getAccessEvents: (condominiumId) =>
     api.get(`/condominiums/${condominiumId}/access-events`),
   getDashboard: (condominiumId) =>
     api.get(`/condominiums/${condominiumId}/dashboard`),
+  createVisit: (condominiumId, payload) =>
+    api.post(`/condominiums/${condominiumId}/visits`, payload),
   registerEntry: (condominiumId, visitId, licensePlate) =>
     api.post('/access/entry', {
       condominium_id: condominiumId,
