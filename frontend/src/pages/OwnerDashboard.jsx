@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { authAPI, condominiumAPI } from '../services/api'
+import { formatDateTime, getVisitToken, saveVisitToken, unitLabel, visitStatus } from '../utils/format'
 
 export default function OwnerDashboard() {
   const [userProfile, setUserProfile] = useState(null)
@@ -7,6 +8,8 @@ export default function OwnerDashboard() {
   const [selectedCondominiumId, setSelectedCondominiumId] = useState('')
   const [units, setUnits] = useState([])
   const [visits, setVisits] = useState([])
+  const [events, setEvents] = useState([])
+  const [copiedId, setCopiedId] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
@@ -62,13 +65,19 @@ export default function OwnerDashboard() {
       if (!selectedCondominiumId) return
 
       try {
-        const [unitsRes, visitsRes] = await Promise.all([
+        const [unitsRes, visitsRes, eventsRes] = await Promise.all([
           condominiumAPI.getUnits(selectedCondominiumId),
           condominiumAPI.getVisits(selectedCondominiumId),
+          condominiumAPI.getAccessEvents(selectedCondominiumId).catch(() => ({ data: [] })),
         ])
 
-        setUnits(unitsRes.data || [])
+        const unitList = unitsRes.data || []
+        setUnits(unitList)
         setVisits(visitsRes.data || [])
+        setEvents(eventsRes.data || [])
+        if (unitList.length === 1) {
+          setForm((prev) => (prev.unit_id ? prev : { ...prev, unit_id: unitList[0].id }))
+        }
       } catch (err) {
         console.error('Error cargando unidades y visitas', err)
       }
@@ -102,9 +111,10 @@ export default function OwnerDashboard() {
       const response = await condominiumAPI.createVisit(selectedCondominiumId, payload)
       const newVisit = response.data
 
+      saveVisitToken(newVisit.id, newVisit.qr_token)
       setMessage(`Visita creada correctamente. QR: ${newVisit.qr_token}`)
       setForm({
-        unit_id: '',
+        unit_id: units.length === 1 ? units[0].id : '',
         visitor_alias: '',
         license_plate: '',
         valid_from: '',
@@ -115,10 +125,22 @@ export default function OwnerDashboard() {
 
       const visitsRes = await condominiumAPI.getVisits(selectedCondominiumId)
       setVisits(visitsRes.data || [])
+      const eventsRes = await condominiumAPI.getAccessEvents(selectedCondominiumId).catch(() => ({ data: [] }))
+      setEvents(eventsRes.data || [])
     } catch (err) {
       setMessage(err.response?.data?.detail || 'Error creando la visita')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleCopy = async (visitId, token) => {
+    try {
+      await navigator.clipboard.writeText(token)
+      setCopiedId(visitId)
+      setTimeout(() => setCopiedId(''), 2000)
+    } catch {
+      setMessage('No se pudo copiar. Selecciona el texto del QR manualmente.')
     }
   }
 
@@ -193,7 +215,7 @@ export default function OwnerDashboard() {
                 >
                   <option value="">Selecciona unidad</option>
                   {units.map((unit) => (
-                    <option key={unit.id} value={unit.id}>{unit.code} {unit.block ? `- ${unit.block}` : ''}</option>
+                    <option key={unit.id} value={unit.id}>{unitLabel(unit)}</option>
                   ))}
                 </select>
               </div>
@@ -285,28 +307,69 @@ export default function OwnerDashboard() {
               {visits.length === 0 ? (
                 <p className="text-gray-500">Aún no hay visitas registradas.</p>
               ) : (
-                visits.map((visit) => (
-                  <div key={visit.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex justify-between items-start gap-3 mb-2">
-                      <div>
-                        <p className="font-semibold text-gray-800">{visit.visitor_alias || 'Visita'}</p>
-                        <p className="text-sm text-gray-500">{visit.license_plate || 'Sin placa'}</p>
+                visits.map((visit) => {
+                  const status = visitStatus(visit)
+                  const token = getVisitToken(visit.id)
+                  return (
+                    <div key={visit.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex justify-between items-start gap-3 mb-2">
+                        <div>
+                          <p className="font-semibold text-gray-800">{visit.visitor_alias || 'Visita'}</p>
+                          <p className="text-sm text-gray-500">Placa: {visit.license_plate || 'Sin placa'}</p>
+                        </div>
+                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${status.className}`}>
+                          {status.label}
+                        </span>
                       </div>
-                      <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-1 rounded-full">
-                        {visit.status}
-                      </span>
+                      <p className="text-sm text-gray-600">Unidad: {unitLabel(visit)}</p>
+                      <p className="text-sm text-gray-600">
+                        Vigencia: {formatDateTime(visit.valid_from)} → {formatDateTime(visit.valid_until)}
+                      </p>
+                      <p className="text-sm text-gray-600">Usos: {visit.uses_count} de {visit.max_uses}</p>
+                      {visit.notes && <p className="text-sm text-gray-500 italic">Notas: {visit.notes}</p>}
+                      <div className="mt-3 bg-gray-100 border border-gray-200 rounded-lg p-3 text-xs break-all text-gray-700">
+                        {token ? `QR: ${token}` : 'QR disponible solo en el dispositivo donde se creó la visita'}
+                      </div>
+                      {token && (
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(visit.id, token)}
+                          className="mt-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold py-1 px-3 rounded-lg"
+                        >
+                          {copiedId === visit.id ? '✓ Copiado' : 'Copiar QR'}
+                        </button>
+                      )}
                     </div>
-                    <p className="text-sm text-gray-600">Unidad: {visit.unit_id}</p>
-                    <p className="text-sm text-gray-600">Desde: {new Date(visit.valid_from).toLocaleString()}</p>
-                    <p className="text-sm text-gray-600">Hasta: {new Date(visit.valid_until).toLocaleString()}</p>
-                    <div className="mt-3 bg-gray-100 border border-gray-200 rounded-lg p-3 text-xs break-all text-gray-700">
-                      QR: {visit.qr_token || 'Generado al crear'}
-                    </div>
-                  </div>
-                ))
+                  )
+                })
               )}
             </div>
           </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl shadow">
+          <h2 className="text-xl font-bold text-gray-800 mb-4">Historial de accesos</h2>
+          {events.length === 0 ? (
+            <p className="text-gray-500">Aún no hay accesos registrados para tus visitas.</p>
+          ) : (
+            <div className="divide-y max-h-96 overflow-y-auto">
+              {events.map((event) => (
+                <div key={event.id} className="py-3 flex justify-between items-center">
+                  <div>
+                    <p className="font-semibold text-gray-800">
+                      {event.event_type === 'entry' ? '📥 Entrada' : '📤 Salida'}
+                      {event.visitor_alias ? ` · ${event.visitor_alias}` : ''}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      {unitLabel(event)}
+                      {event.license_plate_detected ? ` · Placa ${event.license_plate_detected}` : ''}
+                    </p>
+                  </div>
+                  <p className="text-xs text-gray-500">{formatDateTime(event.occurred_at)}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="bg-white p-6 rounded-xl shadow">

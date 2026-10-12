@@ -22,7 +22,7 @@ from app.schemas import (
     UserCreate,
     VisitCreate,
 )
-from app.services import create_visit_token_hash, validate_visit_token, register_access
+from app.services import create_visit_token_hash, normalize_plate, validate_visit_token, register_access
 from app.seed import init_demo_data
 
 Base.metadata.create_all(bind=engine)
@@ -190,11 +190,27 @@ def list_units(
     if membership.role == "propietario" and membership.unit_id:
         units_query = units_query.filter(Unit.id == membership.unit_id)
     units = units_query.all()
+
+    owners_by_unit = {}
+    if membership.role in ["administrador", "guardia"]:
+        owner_memberships = db.query(Membership).filter(
+            Membership.condominium_id == uuid.UUID(condominium_id),
+            Membership.role == "propietario",
+            Membership.status == "active",
+            Membership.unit_id.isnot(None),
+        ).all()
+        for m in owner_memberships:
+            if m.user is not None:
+                owners_by_unit.setdefault(m.unit_id, []).append(
+                    {"user_id": str(m.user_id), "name": m.user.name, "email": m.user.email}
+                )
+
     return [
         {
             "id": str(u.id),
             "code": u.code,
             "block": u.block,
+            "owners": owners_by_unit.get(u.id, []),
         }
         for u in units
     ]
@@ -449,9 +465,23 @@ def access_exit(
             detail="Solo guardia o administrador puede registrar salida",
         )
 
+    exit_visit = None
+    plate = normalize_plate(payload.license_plate_detected)
+    if plate:
+        candidates = (
+            db.query(Visit)
+            .filter(
+                Visit.condominium_id == uuid.UUID(payload.condominium_id),
+                Visit.license_plate.isnot(None),
+            )
+            .order_by(Visit.created_at.desc())
+            .all()
+        )
+        exit_visit = next((v for v in candidates if normalize_plate(v.license_plate) == plate), None)
+
     event = register_access(
         db,
-        None,
+        exit_visit,
         "exit",
         payload.license_plate_detected,
         current_user.id,
@@ -490,6 +520,8 @@ def list_visits(
             "id": str(v.id),
             "condominium_id": str(v.condominium_id),
             "unit_id": str(v.unit_id),
+            "unit_code": v.unit.code if v.unit else None,
+            "unit_block": v.unit.block if v.unit else None,
             "status": v.status,
             "valid_from": v.valid_from,
             "valid_until": v.valid_until,
@@ -515,19 +547,23 @@ def list_access_events(
         Membership.user_id == current_user.id,
         Membership.condominium_id == uuid.UUID(condominium_id),
         Membership.status == "active",
-        Membership.role.in_(["guardia", "administrador"]),
+        Membership.role.in_(["guardia", "administrador", "propietario"]),
     ).first()
 
     if not membership:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permiso denegado")
 
-    events = (
-        db.query(AccessEvent)
-        .filter(AccessEvent.condominium_id == uuid.UUID(condominium_id))
-        .order_by(AccessEvent.occurred_at.desc())
-        .limit(100)
-        .all()
-    )
+    events_query = db.query(AccessEvent).filter(AccessEvent.condominium_id == uuid.UUID(condominium_id))
+    if membership.role == "propietario":
+        if not membership.unit_id:
+            return []
+        events_query = events_query.filter(AccessEvent.unit_id == membership.unit_id)
+    events = events_query.order_by(AccessEvent.occurred_at.desc()).limit(100).all()
+
+    units = {
+        u.id: u
+        for u in db.query(Unit).filter(Unit.condominium_id == uuid.UUID(condominium_id)).all()
+    }
 
     return [
         {
@@ -536,6 +572,10 @@ def list_access_events(
             "license_plate_detected": e.license_plate_detected,
             "occurred_at": e.occurred_at,
             "visit_id": str(e.visit_id) if e.visit_id else None,
+            "unit_id": str(e.unit_id) if e.unit_id else None,
+            "unit_code": units[e.unit_id].code if e.unit_id in units else None,
+            "unit_block": units[e.unit_id].block if e.unit_id in units else None,
+            "visitor_alias": e.visit.visitor_alias if e.visit else None,
         }
         for e in events
     ]

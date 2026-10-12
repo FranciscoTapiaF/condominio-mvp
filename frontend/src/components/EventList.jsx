@@ -1,11 +1,12 @@
 import React from 'react'
+import { unitLabel } from '../utils/format'
 
 export default function EventList({ events }) {
   return (
     <div className="bg-white rounded-lg shadow">
       <div className="p-6 border-b">
         <h3 className="text-lg font-bold text-gray-800">
-          Eventos Recientes (últimas 2 horas)
+          Eventos Recientes
         </h3>
       </div>
 
@@ -21,6 +22,11 @@ export default function EventList({ events }) {
                 <p className="font-semibold text-gray-800">
                   {event.event_type === 'entry' ? '📥 ENTRADA' : '📤 SALIDA'}
                 </p>
+                {(event.visitor_alias || event.unit_code) && (
+                  <p className="text-sm text-gray-600">
+                    {event.visitor_alias || 'Visitante'} · Unidad {unitLabel(event)}
+                  </p>
+                )}
                 {event.license_plate_detected && (
                   <p className="text-sm text-gray-600">
                     Placa: {event.license_plate_detected}
