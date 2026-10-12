@@ -186,7 +186,10 @@ def list_units(
     if not membership:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permiso denegado")
 
-    units = db.query(Unit).filter(Unit.condominium_id == uuid.UUID(condominium_id)).all()
+    units_query = db.query(Unit).filter(Unit.condominium_id == uuid.UUID(condominium_id))
+    if membership.role == "propietario" and membership.unit_id:
+        units_query = units_query.filter(Unit.id == membership.unit_id)
+    units = units_query.all()
     return [
         {
             "id": str(u.id),
@@ -274,6 +277,19 @@ def assign_role(
     if not target_user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
+    unit_uuid = None
+    if payload.unit_id:
+        try:
+            unit_uuid = uuid.UUID(payload.unit_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="unit_id inválido")
+        unit = db.query(Unit).filter(
+            Unit.id == unit_uuid,
+            Unit.condominium_id == uuid.UUID(condominium_id),
+        ).first()
+        if not unit:
+            raise HTTPException(status_code=400, detail="La unidad no pertenece al condominio")
+
     # Crear o actualizar membership
     membership = db.query(Membership).filter(
         Membership.user_id == target_user.id,
@@ -283,19 +299,27 @@ def assign_role(
     if membership:
         membership.role = payload.role
         membership.status = "active"
+        if payload.role == "propietario" and unit_uuid:
+            membership.unit_id = unit_uuid
     else:
         membership = Membership(
             id=uuid.uuid4(),
             user_id=target_user.id,
             condominium_id=uuid.UUID(condominium_id),
             role=payload.role,
+            unit_id=unit_uuid if payload.role == "propietario" else None,
             status="active",
         )
         db.add(membership)
 
     db.commit()
     db.refresh(membership)
-    return {"user_id": str(membership.user_id), "role": membership.role, "condominium_id": str(membership.condominium_id)}
+    return {
+        "user_id": str(membership.user_id),
+        "role": membership.role,
+        "condominium_id": str(membership.condominium_id),
+        "unit_id": str(membership.unit_id) if membership.unit_id else None,
+    }
 
 
 @app.post("/condominiums/{condominium_id}/visits")
@@ -308,6 +332,13 @@ def create_visit(condominium_id: str, payload: VisitCreate, db: Session = Depend
 
     if not membership or membership.role not in ["administrador", "guardia", "propietario"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permiso denegado")
+
+    if (
+        membership.role == "propietario"
+        and membership.unit_id
+        and str(membership.unit_id) != str(payload.unit_id)
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo puedes crear visitas para tu unidad")
 
     visit = Visit(
         id=uuid.uuid4(),
@@ -450,7 +481,10 @@ def list_visits(
     if not membership:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permiso denegado")
 
-    visits = db.query(Visit).filter(Visit.condominium_id == uuid.UUID(condominium_id)).all()
+    visits_query = db.query(Visit).filter(Visit.condominium_id == uuid.UUID(condominium_id))
+    if membership.role == "propietario" and membership.unit_id:
+        visits_query = visits_query.filter(Visit.unit_id == membership.unit_id)
+    visits = visits_query.all()
     return [
         {
             "id": str(v.id),

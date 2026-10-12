@@ -74,3 +74,4 @@ class AccessEventCreate(BaseModel):
 class AssignRoleRequest(BaseModel):
     user_email: EmailStr
     role: str
+    unit_id: Optional[str] = None

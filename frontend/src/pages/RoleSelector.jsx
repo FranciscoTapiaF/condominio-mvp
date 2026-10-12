@@ -18,6 +18,8 @@ export default function RoleSelector() {
           const role = availableRoles[0]
           if (role === 'propietario') {
             navigate('/owner-dashboard')
+          } else if (role === 'administrador') {
+            navigate('/admin-dashboard')
           } else {
             navigate('/dashboard')
           }
@@ -37,6 +39,8 @@ export default function RoleSelector() {
     localStorage.setItem('selectedRole', role)
     if (role === 'propietario') {
       navigate('/owner-dashboard')
+    } else if (role === 'administrador') {
+      navigate('/admin-dashboard')
     } else {
       navigate('/dashboard')
     }

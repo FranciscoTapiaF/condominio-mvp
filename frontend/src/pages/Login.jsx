@@ -32,6 +32,8 @@ export default function Login() {
         navigate('/role-selector')
       } else if (selectedRole === 'propietario') {
         navigate('/owner-dashboard')
+      } else if (selectedRole === 'administrador') {
+        navigate('/admin-dashboard')
       } else {
         navigate('/dashboard')
       }
