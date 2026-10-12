@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { condominiumAPI } from '../services/api'
+import { authAPI, condominiumAPI } from '../services/api'
 
 export default function OwnerDashboard() {
   const [userProfile, setUserProfile] = useState(null)
@@ -25,25 +25,15 @@ export default function OwnerDashboard() {
     [condominiums, selectedCondominiumId]
   )
 
-  const loadProfile = async () => {
-    try {
-      const profileRes = await fetch('/api/me')
-      const profileData = await profileRes.json()
-      setUserProfile(profileData)
-    } catch (err) {
-      console.error('Error cargando perfil', err)
-    }
-  }
-
   useEffect(() => {
     const loadData = async () => {
       try {
         const [profileRes, condominiumsRes] = await Promise.all([
-          fetch('/api/me'),
+          authAPI.getMe(),
           condominiumAPI.getCondominiums(),
         ])
 
-        const profileData = await profileRes.json()
+        const profileData = profileRes.data
         const ownerCondominiums = (condominiumsRes.data || []).filter(
           (item) => item.role === 'propietario'
         )

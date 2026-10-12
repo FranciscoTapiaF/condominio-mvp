@@ -30,6 +30,16 @@ export const authAPI = {
 
 export const condominiumAPI = {
   getCondominiums: () => api.get('/condominiums'),
+  createCondominium: (name, address, timezone) =>
+    api.post('/condominiums', { name, address, timezone }),
+  createUnit: (condominiumId, code, block) =>
+    api.post(`/condominiums/${condominiumId}/units`, { code, block }),
+  assignRole: (condominiumId, userEmail, role, unitId) =>
+    api.post(`/condominiums/${condominiumId}/roles/assign`, {
+      user_email: userEmail,
+      role,
+      unit_id: unitId || null,
+    }),
   getUnits: (condominiumId) => api.get(`/condominiums/${condominiumId}/units`),
   getVisits: (condominiumId) =>
     api.get(`/condominiums/${condominiumId}/visits`),
