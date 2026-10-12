@@ -6,7 +6,8 @@ import EntryForm from '../components/EntryForm'
 import { formatDateTime, qrErrorMessage, unitLabel, visitStatus } from '../utils/format'
 
 export default function Dashboard() {
-  const [condominiumId] = useState('bed6c8c8-2e2c-48a0-9acd-a7b7b9f31e79') // Cambiar según necesites
+  const [condominiums, setCondominiums] = useState([])
+  const [condominiumId, setCondominiumId] = useState('')
   const [dashboard, setDashboard] = useState(null)
   const [events, setEvents] = useState([])
   const [visits, setVisits] = useState([])
@@ -20,6 +21,7 @@ export default function Dashboard() {
   const refreshIntervalRef = useRef(null)
 
   const loadData = async () => {
+    if (!condominiumId) return
     try {
       setLoading(true)
       const [dashRes, eventsRes, visitsRes] = await Promise.all([
@@ -39,6 +41,29 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
+    const loadCondominiums = async () => {
+      try {
+        const res = await condominiumAPI.getCondominiums()
+        const list = res.data || []
+        setCondominiums(list)
+        const stored = localStorage.getItem('selectedCondominiumId')
+        const active = list.find((c) => c.id === stored) || list[0]
+        if (active) {
+          localStorage.setItem('selectedCondominiumId', active.id)
+          setCondominiumId(active.id)
+        } else {
+          setLoading(false)
+        }
+      } catch (err) {
+        console.error('Error cargando condominios:', err)
+        setLoading(false)
+      }
+    }
+    loadCondominiums()
+  }, [])
+
+  useEffect(() => {
+    if (!condominiumId) return
     loadData()
 
     // Refrescar cada 30 segundos
@@ -139,6 +164,23 @@ export default function Dashboard() {
           </button>
         </div>
       </div>
+
+      {condominiums.length > 1 && (
+        <div className="max-w-6xl mx-auto px-4 pt-4">
+          <select
+            value={condominiumId}
+            onChange={(e) => {
+              localStorage.setItem('selectedCondominiumId', e.target.value)
+              setCondominiumId(e.target.value)
+            }}
+            className="w-full md:w-96 px-4 py-2 border border-gray-300 rounded-lg"
+          >
+            {condominiums.map((condo) => (
+              <option key={condo.id} value={condo.id}>{condo.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Message */}
       {message && (
