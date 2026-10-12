@@ -23,16 +23,18 @@ from app.schemas import (
     VisitCreate,
 )
 from app.services import create_visit_token_hash, normalize_plate, validate_visit_token, register_access
+from app.config import settings
 from app.seed import init_demo_data
 
 Base.metadata.create_all(bind=engine)
 
-# Inicializar datos demo al arrancar la app
-db = SessionLocal()
-try:
-    init_demo_data(db)
-finally:
-    db.close()
+# Datos demo: solo se siembran si SEED_DEMO=true
+if settings.SEED_DEMO:
+    db = SessionLocal()
+    try:
+        init_demo_data(db)
+    finally:
+        db.close()
 
 app = FastAPI(title="Condominio MVP")
 

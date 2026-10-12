@@ -37,6 +37,12 @@ cp edge-agent/.env.example edge-agent/.env
 docker compose up -d --build
 ```
 
+### Datos demo
+
+Por defecto la base queda limpia (no se siembra `Condominio Demo`).
+Para sembrar datos demo, define `SEED_DEMO=true` en `backend/.env` y reinicia el backend.
+Para partir desde cero: `docker compose down -v && docker compose up -d --build`.
+
 ## API local
 
 - Backend: http://localhost:8000
