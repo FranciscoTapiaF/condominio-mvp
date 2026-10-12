@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { condominiumAPI } from '../services/api'
+import { unitLabel } from '../utils/format'
 
 export default function EntryForm({ condominiumId, onClose, onSuccess, visits }) {
   const [licensePlate, setLicensePlate] = useState('')
@@ -87,7 +88,7 @@ export default function EntryForm({ condominiumId, onClose, onSuccess, visits })
                   .filter((v) => v.status === 'active' && v.uses_count < v.max_uses)
                   .map((visit) => (
                     <option key={visit.id} value={visit.id}>
-                      {visit.visitor_alias} - {visit.unit_id}
+                      {visit.visitor_alias || 'Visita'} - {unitLabel(visit)}{visit.license_plate ? ` (${visit.license_plate})` : ''}
                     </option>
                   ))}
               </select>

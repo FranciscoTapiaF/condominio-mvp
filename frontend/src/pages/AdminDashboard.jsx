@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { authAPI, condominiumAPI } from '../services/api'
+import { unitLabel } from '../utils/format'
 
 const inputClass = 'w-full px-4 py-2 border border-gray-300 rounded-lg'
 const labelClass = 'block text-sm font-semibold text-gray-700 mb-2'
@@ -19,6 +20,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const [isError, setIsError] = useState(false)
 
   const [condoForm, setCondoForm] = useState({ name: '', address: '', timezone: 'America/Santiago' })
   const [unitForm, setUnitForm] = useState({ code: '', block: '' })
@@ -46,13 +48,17 @@ export default function AdminDashboard() {
       const res = await condominiumAPI.getUnits(condominiumId)
       setUnits(res.data || [])
     } catch (err) {
+      setIsError(true)
       setMessage(errorText(err, 'No se pudieron cargar las unidades'))
     }
   }
 
   useEffect(() => {
     loadCondominiums()
-      .catch(() => setMessage('No se pudieron cargar los condominios'))
+      .catch(() => {
+        setIsError(true)
+        setMessage('No se pudieron cargar los condominios')
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -63,10 +69,12 @@ export default function AdminDashboard() {
   const run = async (action, okMessage, failMessage) => {
     setBusy(true)
     setMessage('')
+    setIsError(false)
     try {
       await action()
       setMessage(okMessage)
     } catch (err) {
+      setIsError(true)
       setMessage(errorText(err, failMessage))
     } finally {
       setBusy(false)
@@ -127,6 +135,7 @@ export default function AdminDashboard() {
       async () => {
         await condominiumAPI.assignRole(selectedId, assignForm.email, 'propietario', assignForm.unit_id)
         setAssignForm({ email: '', unit_id: '' })
+        await loadUnits(selectedId)
       },
       'Propietario asignado a la unidad',
       'Error asignando el propietario'
@@ -171,8 +180,14 @@ export default function AdminDashboard() {
 
       <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
         {message && (
-          <div className="bg-blue-100 border-l-4 border-blue-500 text-blue-800 p-4 rounded">
-            {message}
+          <div
+            className={`border-l-4 p-4 rounded ${
+              isError
+                ? 'bg-red-100 border-red-500 text-red-800'
+                : 'bg-green-100 border-green-500 text-green-800'
+            }`}
+          >
+            {isError ? '✕ ' : '✓ '}{message}
           </div>
         )}
 
@@ -191,6 +206,58 @@ export default function AdminDashboard() {
         </div>
 
         <div className="grid lg:grid-cols-2 gap-8">
+          <div className="bg-white p-6 rounded-xl shadow">
+            <h2 className="text-xl font-bold text-gray-800 mb-4">
+              Condominios creados ({condominiums.length})
+            </h2>
+            {condominiums.length === 0 ? (
+              <p className="text-gray-500">Aún no hay condominios. Crea el primero con el formulario.</p>
+            ) : (
+              <ul className="divide-y">
+                {condominiums.map((c) => (
+                  <li key={c.id} className="py-2 flex justify-between items-center">
+                    <span className={c.id === selectedId ? 'font-bold text-blue-700' : 'text-gray-800'}>
+                      {c.name}
+                    </span>
+                    {c.id !== selectedId && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedId(c.id)}
+                        className="text-sm text-blue-600 hover:underline"
+                      >
+                        Seleccionar
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="bg-white p-6 rounded-xl shadow">
+            <h2 className="text-xl font-bold text-gray-800 mb-4">
+              Unidades y propietarios ({units.length})
+            </h2>
+            {noCondo ? (
+              <p className="text-gray-500">Selecciona o crea un condominio para ver sus unidades.</p>
+            ) : units.length === 0 ? (
+              <p className="text-gray-500">Este condominio aún no tiene unidades.</p>
+            ) : (
+              <ul className="divide-y max-h-64 overflow-y-auto">
+                {units.map((u) => (
+                  <li key={u.id} className="py-2">
+                    <p className="font-semibold text-gray-800">{unitLabel(u)}</p>
+                    <p className="text-sm text-gray-600">
+                      {u.owners?.length
+                        ? u.owners.map((o) => `${o.name} (${o.email})`).join(', ')
+                        : 'Sin propietario asignado'}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           <form onSubmit={handleCreateCondo} className="bg-white p-6 rounded-xl shadow space-y-4">
             <h2 className="text-xl font-bold text-gray-800">Crear condominio</h2>
             <div>
@@ -224,9 +291,6 @@ export default function AdminDashboard() {
                 onChange={(e) => setUnitForm({ ...unitForm, block: e.target.value })} />
             </div>
             <button type="submit" disabled={busy || noCondo} className={buttonClass}>Crear unidad</button>
-            <div className="text-sm text-gray-600">
-              Unidades: {units.length === 0 ? 'ninguna' : units.map((u) => u.code).join(', ')}
-            </div>
           </form>
 
           <form onSubmit={handleCreateOwner} className="bg-white p-6 rounded-xl shadow space-y-4">
@@ -267,7 +331,7 @@ export default function AdminDashboard() {
                 onChange={(e) => setAssignForm({ ...assignForm, unit_id: e.target.value })}>
                 <option value="">Selecciona unidad</option>
                 {units.map((u) => (
-                  <option key={u.id} value={u.id}>{u.code}{u.block ? ` - ${u.block}` : ''}</option>
+                  <option key={u.id} value={u.id}>{unitLabel(u)}</option>
                 ))}
               </select>
             </div>

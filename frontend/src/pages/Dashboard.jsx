@@ -3,6 +3,7 @@ import { condominiumAPI } from '../services/api'
 import QRScanner from '../components/QRScanner'
 import EventList from '../components/EventList'
 import EntryForm from '../components/EntryForm'
+import { formatDateTime, qrErrorMessage, unitLabel, visitStatus } from '../utils/format'
 
 export default function Dashboard() {
   const [condominiumId] = useState('bed6c8c8-2e2c-48a0-9acd-a7b7b9f31e79') // Cambiar según necesites
@@ -14,6 +15,8 @@ export default function Dashboard() {
   const [showEntryForm, setShowEntryForm] = useState(false)
   const [selectedVisit, setSelectedVisit] = useState(null)
   const [message, setMessage] = useState('')
+  const [messageIsError, setMessageIsError] = useState(false)
+  const [search, setSearch] = useState('')
   const refreshIntervalRef = useRef(null)
 
   const loadData = async () => {
@@ -50,6 +53,7 @@ export default function Dashboard() {
 
   const handleQRScanned = async (qrToken) => {
     try {
+      setMessageIsError(false)
       setMessage('Validando QR...')
       const response = await condominiumAPI.validateQR(qrToken)
 
@@ -62,9 +66,11 @@ export default function Dashboard() {
         setShowQRScanner(false)
         setMessage('')
       } else {
-        setMessage(`Error: ${response.data.message}`)
+        setMessageIsError(true)
+        setMessage(qrErrorMessage(response.data.message))
       }
     } catch (err) {
+      setMessageIsError(true)
       setMessage('Error validando QR')
     }
   }
@@ -72,10 +78,28 @@ export default function Dashboard() {
   const handleEntryRegistered = async () => {
     setSelectedVisit(null)
     setShowEntryForm(false)
-    setMessage('Entrada registrada ✓')
+    setMessageIsError(false)
+    setMessage('Evento registrado ✓')
     setTimeout(() => setMessage(''), 3000)
     await loadData()
   }
+
+  const term = search.trim().toLowerCase()
+  const filteredVisits = term
+    ? visits.filter(
+        (v) =>
+          (v.license_plate || '').toLowerCase().includes(term.replace(/[^a-z0-9]/g, '')) ||
+          (v.license_plate || '').toLowerCase().includes(term) ||
+          (v.visitor_alias || '').toLowerCase().includes(term)
+      )
+    : []
+  const filteredEvents = term
+    ? events.filter(
+        (e) =>
+          (e.license_plate_detected || '').toLowerCase().includes(term.replace(/[^a-z0-9]/g, '')) ||
+          (e.visitor_alias || '').toLowerCase().includes(term)
+      )
+    : events
 
   const handleLogout = () => {
     localStorage.removeItem('token')
@@ -118,7 +142,13 @@ export default function Dashboard() {
 
       {/* Message */}
       {message && (
-        <div className="bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4">
+        <div
+          className={`border-l-4 p-4 ${
+            messageIsError
+              ? 'bg-red-100 border-red-500 text-red-700'
+              : 'bg-blue-100 border-blue-500 text-blue-700'
+          }`}
+        >
           {message}
         </div>
       )}
@@ -154,7 +184,7 @@ export default function Dashboard() {
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            Escanear QR
+            📥 Escanear QR (Entrada)
           </button>
 
           <button
@@ -164,8 +194,43 @@ export default function Dashboard() {
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            Registrar Manual
+            Entrada / Salida Manual
           </button>
+        </div>
+
+        {/* Search */}
+        <div className="bg-white rounded-lg shadow p-4 mb-8">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por placa o visitante..."
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+          />
+          {term && (
+            <div className="mt-3 divide-y">
+              {filteredVisits.length === 0 ? (
+                <p className="text-gray-500 text-sm py-2">Sin visitas que coincidan.</p>
+              ) : (
+                filteredVisits.map((v) => {
+                  const st = visitStatus(v)
+                  return (
+                    <div key={v.id} className="py-2 flex justify-between items-center">
+                      <div>
+                        <p className="font-semibold text-gray-800">{v.visitor_alias || 'Visita'}</p>
+                        <p className="text-sm text-gray-600">
+                          Placa {v.license_plate || '—'} · Unidad {unitLabel(v)}
+                        </p>
+                      </div>
+                      <span className={`text-xs font-semibold px-2 py-1 rounded-full ${st.className}`}>
+                        {st.label}
+                      </span>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          )}
         </div>
 
         {/* QR Scanner Modal */}
@@ -203,7 +268,13 @@ export default function Dashboard() {
               </div>
               <div>
                 <p className="text-gray-600 text-sm">Unidad</p>
-                <p className="text-lg font-semibold">{selectedVisit.unit_id}</p>
+                <p className="text-lg font-semibold">{unitLabel(selectedVisit)}</p>
+              </div>
+              <div>
+                <p className="text-gray-600 text-sm">Vigencia</p>
+                <p className="text-sm font-semibold">
+                  {formatDateTime(selectedVisit.valid_from)} → {formatDateTime(selectedVisit.valid_until)}
+                </p>
               </div>
               <div>
                 <p className="text-gray-600 text-sm">Usos Disponibles</p>
@@ -222,12 +293,14 @@ export default function Dashboard() {
                       selectedVisit.id,
                       selectedVisit.license_plate
                     )
+                    setMessageIsError(false)
                     setMessage('Entrada registrada ✓')
                     setSelectedVisit(null)
                     setTimeout(() => setMessage(''), 3000)
                     await loadData()
                   } catch (err) {
-                    setMessage('Error registrando entrada')
+                    setMessageIsError(true)
+                    setMessage(err.response?.data?.detail || 'Error registrando entrada')
                   }
                 }}
                 className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition"
@@ -245,7 +318,7 @@ export default function Dashboard() {
         )}
 
         {/* Events List */}
-        <EventList events={events} />
+        <EventList events={filteredEvents} />
       </div>
     </div>
   )
