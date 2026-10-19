@@ -20,10 +20,12 @@ export default function Dashboard() {
   const [search, setSearch] = useState('')
   const refreshIntervalRef = useRef(null)
 
-  const loadData = async () => {
+
+
+  const loadData = async (silent = false) => {
     if (!condominiumId) return
     try {
-      setLoading(true)
+      if (!silent) setLoading(true)
       const [dashRes, eventsRes, visitsRes] = await Promise.all([
         condominiumAPI.getDashboard(condominiumId),
         condominiumAPI.getAccessEvents(condominiumId),
@@ -36,7 +38,7 @@ export default function Dashboard() {
     } catch (err) {
       console.error('Error cargando datos:', err)
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
@@ -62,19 +64,26 @@ export default function Dashboard() {
     loadCondominiums()
   }, [])
 
+
+
   useEffect(() => {
     if (!condominiumId) return
     loadData()
 
-    // Refrescar cada 30 segundos
-    refreshIntervalRef.current = setInterval(loadData, 30000)
+    refreshIntervalRef.current = setInterval(() => {
+      if (showEntryForm || showQRScanner || selectedVisit) return
+      loadData(true)
+    }, 30000)
 
     return () => {
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current)
       }
     }
-  }, [condominiumId])
+  }, [condominiumId, showEntryForm, showQRScanner, selectedVisit])
+
+
+
 
   const handleQRScanned = async (qrToken) => {
     try {
