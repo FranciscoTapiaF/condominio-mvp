@@ -51,6 +51,8 @@ def register_access(
     license_plate: Optional[str] = None,
     guard_user_id: Optional[uuid.UUID] = None,
     condominium_id: Optional[uuid.UUID] = None,
+    occurred_at: Optional[datetime] = None,
+    source: str = "qr",
 ):
     event = AccessEvent(
         id=uuid.uuid4(),
@@ -60,8 +62,8 @@ def register_access(
         guard_user_id=guard_user_id,
         event_type=event_type,
         license_plate_detected=normalize_plate(license_plate),
-        source="qr",
-        occurred_at=datetime.utcnow(),
+        source=source,
+        occurred_at=occurred_at or datetime.utcnow(),
     )
     db.add(event)
     db.flush()

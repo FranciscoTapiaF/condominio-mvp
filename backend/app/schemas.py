@@ -75,3 +75,11 @@ class AssignRoleRequest(BaseModel):
     user_email: EmailStr
     role: str
     unit_id: Optional[str] = None
+
+
+class WalkInEntryCreate(BaseModel):
+    visitor_alias: str
+    unit_id: str
+    license_plate: Optional[str] = None
+    entered_at: Optional[datetime] = None
+
