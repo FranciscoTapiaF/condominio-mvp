@@ -4,6 +4,7 @@ import QRScanner from '../components/QRScanner'
 import EventList from '../components/EventList'
 import EntryForm from '../components/EntryForm'
 import { formatDateTime, qrErrorMessage, unitLabel, visitStatus } from '../utils/format'
+import WalkInForm from '../components/WalkInForm'
 
 export default function Dashboard() {
   const [condominiums, setCondominiums] = useState([])
@@ -19,6 +20,7 @@ export default function Dashboard() {
   const [messageIsError, setMessageIsError] = useState(false)
   const [search, setSearch] = useState('')
   const refreshIntervalRef = useRef(null)
+  const [showWalkIn, setShowWalkIn] = useState(false)
 
 
 
@@ -71,7 +73,7 @@ export default function Dashboard() {
     loadData()
 
     refreshIntervalRef.current = setInterval(() => {
-      if (showEntryForm || showQRScanner || selectedVisit) return
+      if (showEntryForm || showQRScanner || selectedVisit || showWalkIn) return
       loadData(true)
     }, 30000)
 
@@ -80,7 +82,7 @@ export default function Dashboard() {
         clearInterval(refreshIntervalRef.current)
       }
     }
-  }, [condominiumId, showEntryForm, showQRScanner, selectedVisit])
+  }, [condominiumId, showEntryForm, showQRScanner, selectedVisit, showWalkIn])
 
 
 
@@ -109,14 +111,13 @@ export default function Dashboard() {
     }
   }
 
-  const handleEntryRegistered = async () => {
-    setSelectedVisit(null)
-    setShowEntryForm(false)
-    setMessageIsError(false)
-    setMessage('Evento registrado ✓')
-    setTimeout(() => setMessage(''), 3000)
-    await loadData()
-  }
+const handleWalkInRegistered = async () => {
+  setShowWalkIn(false)
+  setMessageIsError(false)
+  setMessage('Ingreso registrado ✓')
+  setTimeout(() => setMessage(''), 3000)
+  await loadData()
+}
 
   const term = search.trim().toLowerCase()
   const filteredVisits = term
@@ -247,6 +248,15 @@ export default function Dashboard() {
             </svg>
             Entrada / Salida Manual
           </button>
+
+          <button
+            onClick={() => setShowWalkIn(true)}
+            className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 px-6 rounded-lg transition mb-8"
+          >
+            Ingreso sin registro previo
+          </button>
+
+
         </div>
 
         {/* Search */}
@@ -299,6 +309,14 @@ export default function Dashboard() {
             onClose={() => setShowEntryForm(false)}
             onSuccess={handleEntryRegistered}
             visits={visits}
+          />
+        )}
+
+        {showWalkIn && (
+          <WalkInForm
+            condominiumId={condominiumId}
+            onClose={() => setShowWalkIn(false)}
+            onSuccess={handleWalkInRegistered}
           />
         )}
 

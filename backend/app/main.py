@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import uuid
 
 from fastapi import Depends, FastAPI, HTTPException, status
@@ -11,6 +11,7 @@ from app.auth import create_access_token, decode_access_token, hash_password, ve
 from app.db import Base, engine, get_db, SessionLocal
 from app.models import AccessEvent, Condominium, Membership, Unit, User, Visit, VisitToken
 from app.schemas import (
+    WalkInEntryCreate,
     AccessEventCreate,
     AccessValidationRequest,
     AccessValidationResponse,
@@ -496,6 +497,77 @@ def access_exit(
         "occurred_at": event.occurred_at,
     }
 
+@app.post("/condominiums/{condominium_id}/walk-in-entry")
+def walk_in_entry(
+    condominium_id: str,
+    payload: WalkInEntryCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    condo_uuid = uuid.UUID(condominium_id)
+
+    membership = db.query(Membership).filter(
+        Membership.user_id == current_user.id,
+        Membership.condominium_id == condo_uuid,
+        Membership.status == "active",
+        Membership.role.in_(["guardia", "administrador"]),
+    ).first()
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo guardia o administrador puede registrar entrada",
+        )
+
+    try:
+        unit_uuid = uuid.UUID(payload.unit_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="unit_id inválido")
+
+    unit = db.query(Unit).filter(
+        Unit.id == unit_uuid,
+        Unit.condominium_id == condo_uuid,
+    ).first()
+    if not unit:
+        raise HTTPException(status_code=400, detail="La unidad no pertenece al condominio")
+
+    entered_at = payload.entered_at or datetime.utcnow()
+    if entered_at.tzinfo is not None:
+        entered_at = entered_at.astimezone(timezone.utc).replace(tzinfo=None)
+
+    visit = Visit(
+        id=uuid.uuid4(),
+        condominium_id=condo_uuid,
+        unit_id=unit_uuid,
+        created_by_user_id=current_user.id,
+        visitor_alias=payload.visitor_alias,
+        license_plate=payload.license_plate,
+        valid_from=entered_at,
+        valid_until=entered_at + timedelta(hours=24),
+        max_uses=1,
+        uses_count=0,
+        status="active",
+        notes="Ingreso sin registro previo",
+    )
+    db.add(visit)
+    db.flush()
+
+    event = register_access(
+        db,
+        visit,
+        "entry",
+        payload.license_plate,
+        current_user.id,
+        condo_uuid,
+        occurred_at=entered_at,
+        source="manual",
+    )
+
+    return {
+        "id": str(event.id),
+        "event_type": "entry",
+        "occurred_at": event.occurred_at,
+        "visit_id": str(visit.id),
+    }
 
 @app.get("/condominiums/{condominium_id}/visits")
 def list_visits(

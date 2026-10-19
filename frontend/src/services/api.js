@@ -66,6 +66,8 @@ export const condominiumAPI = {
     }),
   validateQR: (token) =>
     api.post('/access/validate-qr', { token }),
+  registerWalkIn: (condominiumId, payload) =>
+    api.post(`/condominiums/${condominiumId}/walk-in-entry`, payload),
 }
 
 export default api
